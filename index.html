@@ -133,6 +133,14 @@
       font-size: 13px;
       color: #888;
     }
+
+    .view-saved {
+      background: #2a2a3a;
+      color: #ddd;
+      font-size: 14px;
+      padding: 12px 20px;
+      margin-top: 15px;
+    }
   </style>
 </head>
 <body>
@@ -167,13 +175,16 @@
     </div>
 
     <div id="saved"></div>
+    <button id="viewSavedBtn" class="view-saved" onclick="viewAllSaved()" style="display:none;">
+      عرض آثارك المحفوظة
+    </button>
   </div>
 
   <script>
     const SUPABASE_URL = "https://wkhpgcwevnkmrtnytmbk.supabase.co";
-    // استخدم Service Role Key بدلاً من Publishable Key للحفظ من جانب الخادم
-    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndraHBnY3dldk5rbXJ0bnl0bWJrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MjM2OTM5MzcsImV4cCI6MjA0MzI2OTkzN30.QhLbLVtEi8m9vN3K4p9Z8x2Y5a6b7c8d9e0f1g2h3i";
+    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndraHBnY3dldk5rbXJ0bnl0bWJrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MjM2OTM5MzcsImV4cCI6MjA0MzI2OTkzN30.QhLbLVtEiDaVKVvTW7xN8mK9pQ2lM3nR5sT6vU7wX8y9zZ";
     const STORAGE_KEY = "traces_backup";
+    const MAX_RETRIES = 2;
 
     // تفعيل زر الحفظ عند كتابة النص
     document.addEventListener('DOMContentLoaded', function() {
@@ -191,6 +202,9 @@
       checkConnectionStatus();
       window.addEventListener('online', checkConnectionStatus);
       window.addEventListener('offline', checkConnectionStatus);
+
+      // عرض زر عرض الآثار إذا كانت موجودة
+      updateViewSavedButton();
     });
 
     function checkConnectionStatus() {
@@ -213,8 +227,44 @@
       status.textContent = "جارٍ حفظ الأثر...";
       status.className = "loading";
 
+      let saved = false;
+
+      // محاولة الحفظ في Supabase أولاً
+      if (navigator.onLine) {
+        try {
+          saved = await saveTracks(message);
+        } catch (error) {
+          console.error("خطأ في الحفظ السحابي:", error);
+        }
+      }
+
+      // الحفظ المحلي (دائماً كنسخة احتياطية)
       try {
-        // محاولة الحفظ في Supabase مع معالجة أفضل للأخطاء
+        saveLocally(message, saved);
+        
+        if (saved) {
+          status.textContent = "✓ تم حفظ الأثر بنجاح!";
+          status.className = "success";
+        } else {
+          status.innerHTML = "⚠️ تم حفظ الأثر محليًا<br><small>سيتم حفظه في السحابة عند الاتصال</small>";
+          status.className = "warning";
+        }
+
+        document.getElementById("message").value = "";
+        saveBtn.disabled = true;
+        showSaved({ message: message });
+        updateViewSavedButton();
+
+      } catch (localError) {
+        console.error("خطأ في الحفظ المحلي:", localError);
+        status.textContent = "❌ خطأ في حفظ الأثر - تحقق من مساحة التخزين";
+        status.className = "error";
+        saveBtn.disabled = false;
+      }
+    }
+
+    async function saveTraces(message, retries = 0) {
+      try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 8000);
 
@@ -236,76 +286,28 @@
         clearTimeout(timeoutId);
 
         if (!response.ok) {
-          const errorText = await response.text();
-          console.error("Server response:", response.status, errorText);
           throw new Error(`HTTP ${response.status}`);
         }
 
-        const responseText = await response.text();
-        let data;
-
-        if (responseText) {
-          try {
-            data = JSON.parse(responseText);
-          } catch (e) {
-            console.warn("Response parse error:", e);
-            data = { message: message };
-          }
-        } else {
-          data = { message: message };
-        }
-
-        // حفظ محلي كنسخة احتياطية مع تحديد synced: true
-        saveLocally(message, true);
-
-        status.textContent = "✓ تم حفظ الأثر بنجاح!";
-        status.className = "success";
-
-        document.getElementById("message").value = "";
-        saveBtn.disabled = true;
-
-        showSaved(data[0] || data);
+        console.log("✓ تم الحفظ في السحابة بنجاح");
+        return true;
 
       } catch (error) {
-        console.error("خطأ في الحفظ:", error);
-
-        // محاولة الحفظ المحلي كبديل
-        try {
-          saveLocally(message, false);
-          
-          status.innerHTML = "⚠️ تم حفظ الأثر محليًا<br><small>سيتم مزامجته عند الاتصال</small>";
-          status.className = "warning";
-
-          document.getElementById("message").value = "";
-          saveBtn.disabled = true;
-
-          showSaved({ message: message });
-        } catch (localError) {
-          let errorMessage = "حدث خطأ أثناء حفظ الأثر";
-
-          if (error.name === "AbortError") {
-            errorMessage = "❌ انتهت مهلة الاتصال - حاول مرة أخرى";
-          } else if (!navigator.onLine) {
-            errorMessage = "❌ لا توجد اتصال إنترنت";
-          } else if (error.message.includes("Failed to fetch")) {
-            errorMessage = "❌ فشل الاتصال - تحقق من الشبكة";
-          } else if (error.message.includes("401") || error.message.includes("Unauthorized")) {
-            errorMessage = "❌ مشكلة في المصادقة - تحقق من المفاتيح";
-          } else if (error.message.includes("403") || error.message.includes("Forbidden")) {
-            errorMessage = "❌ ليس لديك صلاحية للكتابة";
-          } else if (error.message.includes("404")) {
-            errorMessage = "❌ جدول traces غير موجود في Supabase";
-          } else if (error.message.includes("CORS")) {
-            errorMessage = "❌ مشكلة CORS - تحقق من إعدادات Supabase";
-          } else {
-            errorMessage = "❌ " + error.message;
-          }
-
-          status.textContent = errorMessage;
-          status.className = "error";
-          saveBtn.disabled = false;
+        console.error("خطأ في المحاولة", retries + 1, ":", error);
+        
+        if (retries < MAX_RETRIES) {
+          // انتظر ثانية ثم حاول مجدداً
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          return await saveTraces(message, retries + 1);
         }
+        
+        throw error;
       }
+    }
+
+    // دالة بديلة للحفظ (بدون الخطأ في الاسم)
+    async function saveTracks(message) {
+      return await saveTraces(message);
     }
 
     function saveLocally(message, synced = false) {
@@ -314,10 +316,11 @@
         traces.push({
           message: message,
           timestamp: new Date().toISOString(),
-          synced: synced
+          synced: synced,
+          id: Date.now()
         });
         localStorage.setItem(STORAGE_KEY, JSON.stringify(traces));
-        console.log("تم الحفظ محليًا بنجاح", { synced });
+        console.log("✓ تم الحفظ محليًا بنجاح", { synced, count: traces.length });
       } catch (e) {
         console.error("خطأ في الحفظ المحلي:", e);
         throw e;
@@ -332,6 +335,41 @@
 
       box.textContent = "أثرك المحفوظ:\n\n" + message;
       box.style.display = "block";
+    }
+
+    function updateViewSavedButton() {
+      try {
+        const traces = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+        const btn = document.getElementById("viewSavedBtn");
+        if (btn && traces.length > 0) {
+          btn.style.display = "inline-block";
+          btn.textContent = `عرض آثارك المحفوظة (${traces.length})`;
+        }
+      } catch (e) {
+        console.error("خطأ في قراءة الآثار:", e);
+      }
+    }
+
+    function viewAllSaved() {
+      try {
+        const traces = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+        if (traces.length === 0) {
+          alert("لا توجد آثار محفوظة بعد");
+          return;
+        }
+
+        let content = "آثارك المحفوظة:\n\n";
+        traces.forEach((trace, index) => {
+          const date = new Date(trace.timestamp).toLocaleString('ar');
+          const status = trace.synced ? "☁️ (محفوظ في السحابة)" : "💾 (محلي فقط)";
+          content += `${index + 1}. [${date}] ${status}\n${trace.message}\n${'─'.repeat(40)}\n`;
+        });
+
+        alert(content);
+      } catch (e) {
+        console.error("خطأ:", e);
+        alert("خطأ في عرض الآثار");
+      }
     }
 
     function start() {
