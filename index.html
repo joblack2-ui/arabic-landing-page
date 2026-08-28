@@ -79,6 +79,7 @@
       color: #ddd;
       line-height: 1.8;
       white-space: pre-wrap;
+      text-align: right;
     }
 
     .success {
@@ -87,7 +88,7 @@
     }
 
     .error {
-      color: #ff6b6b;
+      color: #ff7777;
       margin-top: 15px;
     }
   </style></head><body>  <div class="container"><h1>الأثر</h1>
@@ -116,94 +117,113 @@
     إلغاء
   </button>
 
-  <div id="status" class="success"></div>
+  <div id="status"></div>
 
 </div>
 
 <div id="saved"></div>
 
   </div>  <script>
+    const SUPABASE_URL =
+      "https://wkhpgcwevnkmrtnytmbk.supabase.co";
 
-    // التحقق من توفر localStorage
-    function isLocalStorageAvailable() {
-      try {
-        const test = '__localStorage_test__';
-        localStorage.setItem(test, test);
-        localStorage.removeItem(test);
-        return true;
-      } catch(e) {
-        return false;
-      }
-    }
+    const SUPABASE_KEY =
+      "sb_publishable_lr9IOVlibgbCWNqL3eknLQ_Oe0FIwvR";
 
-    function start() {
-      document.getElementById("form").style.display = "block";
-      document.getElementById("startButton").style.display = "none";
-      document.getElementById("message").focus();
-    }
+    async function saveTrace() {
 
-    function saveTrace() {
+      const message =
+        document.getElementById("message").value.trim();
 
-      const message = document.getElementById("message").value.trim();
-      const statusElement = document.getElementById("status");
+      const status =
+        document.getElementById("status");
 
       if (!message) {
-        statusElement.textContent = "اكتب شيئًا أولًا...";
-        statusElement.classList.remove("error");
+        status.textContent = "اكتب شيئًا أولًا...";
+        status.className = "error";
         return;
       }
 
+      status.textContent = "جارٍ حفظ الأثر...";
+      status.className = "success";
+
       try {
-        if (!isLocalStorageAvailable()) {
-          throw new Error("localStorage غير متاح");
+
+        const response = await fetch(
+          SUPABASE_URL + "/rest/v1/traces",
+          {
+            method: "POST",
+
+            headers: {
+              "Content-Type": "application/json",
+              "apikey": SUPABASE_KEY,
+              "Authorization": "Bearer " + SUPABASE_KEY,
+              "Prefer": "return=representation"
+            },
+
+            body: JSON.stringify({
+              message: message
+            })
+          }
+        );
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(errorText);
         }
 
-        localStorage.setItem("myTrace", message);
+        const data = await response.json();
 
-        statusElement.textContent = "✓ تم حفظ الأثر بنجاح.";
-        statusElement.classList.remove("error");
+        status.textContent = "تم حفظ الأثر بنجاح.";
+        status.className = "success";
 
         document.getElementById("message").value = "";
 
-        showSaved();
+        showSaved(data[0]);
 
       } catch (error) {
-        statusElement.textContent = "❌ خطأ: لم يتم حفظ الأثر. " + error.message;
-        statusElement.classList.add("error");
-        console.error("خطأ في الحفظ:", error);
-      }
 
+        console.error(error);
+
+        status.textContent =
+          "حدث خطأ أثناء حفظ الأثر.";
+
+        status.className = "error";
+      }
     }
 
-    function showSaved() {
+    function showSaved(trace) {
 
-      try {
-        const saved = localStorage.getItem("myTrace");
+      if (!trace) return;
 
-        if (saved) {
-          const box = document.getElementById("saved");
+      const box =
+        document.getElementById("saved");
 
-          box.textContent = "أثرك المحفوظ:\n\n" + saved;
+      box.textContent =
+        "أثرك المحفوظ:\n\n" +
+        trace.message;
 
-          box.style.display = "block";
-        }
-      } catch (error) {
-        console.error("خطأ في استرجاع الأثر:", error);
-      }
+      box.style.display = "block";
+    }
 
+    function start() {
+
+      document.getElementById("form").style.display =
+        "block";
+
+      document.getElementById("startButton").style.display =
+        "none";
+
+      document.getElementById("message").focus();
     }
 
     function cancel() {
 
-      document.getElementById("form").style.display = "none";
-      document.getElementById("startButton").style.display = "inline-block";
-      document.getElementById("status").textContent = "";
+      document.getElementById("form").style.display =
+        "none";
 
+      document.getElementById("startButton").style.display =
+        "inline-block";
     }
-
-    window.onload = function() {
-      showSaved();
-    };
-
   </script></body>
 </html>
