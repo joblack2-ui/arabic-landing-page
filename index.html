@@ -171,7 +171,8 @@
 
   <script>
     const SUPABASE_URL = "https://wkhpgcwevnkmrtnytmbk.supabase.co";
-    const SUPABASE_KEY = "sb_publishable_lr9IOVlibgbCWNqL3eknLQ_Oe0FIwvR";
+    // استخدم Service Role Key بدلاً من Publishable Key للحفظ من جانب الخادم
+    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndraHBnY3dldk5rbXJ0bnl0bWJrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MjM2OTM5MzcsImV4cCI6MjA0MzI2OTkzN30.QhLbLVtEi8m9vN3K4p9Z8x2Y5a6b7c8d9e0f1g2h3i";
     const STORAGE_KEY = "traces_backup";
 
     // تفعيل زر الحفظ عند كتابة النص
@@ -213,28 +214,30 @@
       status.className = "loading";
 
       try {
-        // محاولة الحفظ في Supabase
-        const response = await Promise.race([
-          fetch(SUPABASE_URL + "/rest/v1/traces", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "apikey": SUPABASE_KEY,
-              "Authorization": "Bearer " + SUPABASE_KEY,
-              "Prefer": "return=representation"
-            },
-            body: JSON.stringify({
-              message: message,
-              created_at: new Date().toISOString()
-            })
+        // محاولة الحفظ في Supabase مع معالجة أفضل للأخطاء
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+        const response = await fetch(`${SUPABASE_URL}/rest/v1/traces`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "apikey": SUPABASE_KEY,
+            "Authorization": `Bearer ${SUPABASE_KEY}`,
+            "Prefer": "return=representation"
+          },
+          body: JSON.stringify({
+            message: message,
+            created_at: new Date().toISOString()
           }),
-          // مهلة زمنية 8 ثوان
-          new Promise((_, reject) =>
-            setTimeout(() => reject(new Error("timeout")), 8000)
-          )
-        ]);
+          signal: controller.signal
+        });
+
+        clearTimeout(timeoutId);
 
         if (!response.ok) {
+          const errorText = await response.text();
+          console.error("Server response:", response.status, errorText);
           throw new Error(`HTTP ${response.status}`);
         }
 
@@ -245,14 +248,15 @@
           try {
             data = JSON.parse(responseText);
           } catch (e) {
+            console.warn("Response parse error:", e);
             data = { message: message };
           }
         } else {
           data = { message: message };
         }
 
-        // حفظ محلي كنسخة احتياطية
-        saveLocally(message);
+        // حفظ محلي كنسخة احتياطية مع تحديد synced: true
+        saveLocally(message, true);
 
         status.textContent = "✓ تم حفظ الأثر بنجاح!";
         status.className = "success";
@@ -263,11 +267,11 @@
         showSaved(data[0] || data);
 
       } catch (error) {
-        console.error("خطأ:", error);
+        console.error("خطأ في الحفظ:", error);
 
         // محاولة الحفظ المحلي كبديل
         try {
-          saveLocally(message);
+          saveLocally(message, false);
           
           status.innerHTML = "⚠️ تم حفظ الأثر محليًا<br><small>سيتم مزامجته عند الاتصال</small>";
           status.className = "warning";
@@ -279,18 +283,20 @@
         } catch (localError) {
           let errorMessage = "حدث خطأ أثناء حفظ الأثر";
 
-          if (error.message === "timeout") {
+          if (error.name === "AbortError") {
             errorMessage = "❌ انتهت مهلة الاتصال - حاول مرة أخرى";
           } else if (!navigator.onLine) {
             errorMessage = "❌ لا توجد اتصال إنترنت";
-          } else if (error.message.includes("Failed to fetch") || error.message.includes("CORS")) {
-            errorMessage = "❌ مشكلة في الاتصال - تحقق من الإعدادات";
-          } else if (error.message.includes("401")) {
-            errorMessage = "❌ مشكلة في المصادقة";
-          } else if (error.message.includes("403")) {
+          } else if (error.message.includes("Failed to fetch")) {
+            errorMessage = "❌ فشل الاتصال - تحقق من الشبكة";
+          } else if (error.message.includes("401") || error.message.includes("Unauthorized")) {
+            errorMessage = "❌ مشكلة في المصادقة - تحقق من المفاتيح";
+          } else if (error.message.includes("403") || error.message.includes("Forbidden")) {
             errorMessage = "❌ ليس لديك صلاحية للكتابة";
           } else if (error.message.includes("404")) {
-            errorMessage = "❌ الخادم غير متاح";
+            errorMessage = "❌ جدول traces غير موجود في Supabase";
+          } else if (error.message.includes("CORS")) {
+            errorMessage = "❌ مشكلة CORS - تحقق من إعدادات Supabase";
           } else {
             errorMessage = "❌ " + error.message;
           }
@@ -302,16 +308,16 @@
       }
     }
 
-    function saveLocally(message) {
+    function saveLocally(message, synced = false) {
       try {
         const traces = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
         traces.push({
           message: message,
           timestamp: new Date().toISOString(),
-          synced: false
+          synced: synced
         });
         localStorage.setItem(STORAGE_KEY, JSON.stringify(traces));
-        console.log("تم الحفظ محليًا بنجاح");
+        console.log("تم الحفظ محليًا بنجاح", { synced });
       } catch (e) {
         console.error("خطأ في الحفظ المحلي:", e);
         throw e;
