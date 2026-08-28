@@ -1,8 +1,10 @@
-<!DOCTYPE html><html lang="ar" dir="rtl">
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>الأثر</title>
+
   <style>
     * {
       box-sizing: border-box;
@@ -77,13 +79,6 @@
       cursor: not-allowed;
     }
 
-    .secondary-btn {
-      background: #2a2a3a;
-      color: #ddd;
-      font-size: 14px;
-      padding: 12px 20px;
-    }
-
     #form {
       display: none;
     }
@@ -125,15 +120,6 @@
       font-size: 14px;
     }
 
-    .offline-notice {
-      background: #2a2a2a;
-      padding: 10px;
-      border-radius: 8px;
-      margin-top: 10px;
-      font-size: 13px;
-      color: #888;
-    }
-
     .view-saved {
       background: #2a2a3a;
       color: #ddd;
@@ -143,8 +129,11 @@
     }
   </style>
 </head>
+
 <body>
+
   <div class="container">
+
     <h1>الأثر</h1>
 
     <p>
@@ -158,7 +147,11 @@
     </button>
 
     <div id="form">
-      <textarea id="message" placeholder="اكتب أثرك هنا..."></textarea>
+
+      <textarea
+        id="message"
+        placeholder="اكتب أثرك هنا..."
+      ></textarea>
 
       <br>
 
@@ -175,216 +168,525 @@
     </div>
 
     <div id="saved"></div>
-    <button id="viewSavedBtn" class="view-saved" onclick="viewAllSaved()" style="display:none;">
+
+    <button
+      id="viewSavedBtn"
+      class="view-saved"
+      onclick="viewAllSaved()"
+      style="display:none;"
+    >
       عرض آثارك المحفوظة
     </button>
+
   </div>
 
   <script>
-    const SUPABASE_URL = "https://wkhpgcwevnkmrtnytmbk.supabase.co";
-    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndraHBnY3dldk5rbXJ0bnl0bWJrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MjM2OTM5MzcsImV4cCI6MjA0MzI2OTkzN30.QhLbLVtEiDaVKVvTW7xN8mK9pQ2lM3nR5sT6vU7wX8y9zZ";
+
+    const SUPABASE_URL =
+      "https://wkhpgcwevnkmrtnytmbk.supabase.co";
+
+    const SUPABASE_KEY =
+      "sb_publishable_lr9IOVlibgbCWNqL3eknLQ_Oe0FIwvR";
+
     const STORAGE_KEY = "traces_backup";
+
     const MAX_RETRIES = 2;
 
-    // تفعيل زر الحفظ عند كتابة النص
-    document.addEventListener('DOMContentLoaded', function() {
-      const textarea = document.getElementById("message");
-      if (textarea) {
-        textarea.addEventListener('input', function() {
-          const saveBtn = document.getElementById("saveBtn");
-          if (saveBtn) {
-            saveBtn.disabled = this.value.trim().length === 0;
-          }
-        });
-      }
 
-      // التحقق من حالة الاتصال
+    document.addEventListener("DOMContentLoaded", function () {
+
+      const textarea =
+        document.getElementById("message");
+
+      textarea.addEventListener("input", function () {
+
+        const saveBtn =
+          document.getElementById("saveBtn");
+
+        saveBtn.disabled =
+          this.value.trim().length === 0;
+
+      });
+
       checkConnectionStatus();
-      window.addEventListener('online', checkConnectionStatus);
-      window.addEventListener('offline', checkConnectionStatus);
 
-      // عرض زر عرض الآثار إذا كانت موجودة
+      window.addEventListener(
+        "online",
+        checkConnectionStatus
+      );
+
+      window.addEventListener(
+        "offline",
+        checkConnectionStatus
+      );
+
       updateViewSavedButton();
+
     });
 
+
     function checkConnectionStatus() {
+
       const isOnline = navigator.onLine;
-      console.log("حالة الاتصال:", isOnline ? "متصل" : "غير متصل");
+
+      console.log(
+        "حالة الاتصال:",
+        isOnline ? "متصل" : "غير متصل"
+      );
+
     }
 
+
     async function saveTrace() {
-      const message = document.getElementById("message").value.trim();
-      const status = document.getElementById("status");
-      const saveBtn = document.getElementById("saveBtn");
+
+      const message =
+        document.getElementById("message")
+          .value.trim();
+
+      const status =
+        document.getElementById("status");
+
+      const saveBtn =
+        document.getElementById("saveBtn");
+
 
       if (!message) {
-        status.textContent = "اكتب شيئًا أولًا...";
+
+        status.textContent =
+          "اكتب شيئًا أولًا...";
+
         status.className = "error";
+
         return;
       }
 
+
       saveBtn.disabled = true;
-      status.textContent = "جارٍ حفظ الأثر...";
+
+      status.textContent =
+        "جارٍ حفظ الأثر...";
+
       status.className = "loading";
+
 
       let saved = false;
 
-      // محاولة الحفظ في Supabase أولاً
+
       if (navigator.onLine) {
+
         try {
-          saved = await saveTracks(message);
+
+          saved =
+            await saveTraces(message);
+
         } catch (error) {
-          console.error("خطأ في الحفظ السحابي:", error);
+
+          console.error(
+            "خطأ في الحفظ السحابي:",
+            error
+          );
+
         }
+
       }
 
-      // الحفظ المحلي (دائماً كنسخة احتياطية)
+
       try {
+
         saveLocally(message, saved);
-        
+
+
         if (saved) {
-          status.textContent = "✓ تم حفظ الأثر بنجاح!";
-          status.className = "success";
+
+          status.textContent =
+            "✓ تم حفظ الأثر بنجاح!";
+
+          status.className =
+            "success";
+
         } else {
-          status.innerHTML = "⚠️ تم حفظ الأثر محليًا<br><small>سيتم حفظه في السحابة عند الاتصال</small>";
-          status.className = "warning";
+
+          status.innerHTML =
+            "⚠️ تم حفظ الأثر محليًا<br>" +
+            "<small>سيتم حفظه في السحابة عند الاتصال</small>";
+
+          status.className =
+            "warning";
+
         }
 
-        document.getElementById("message").value = "";
+
+        document.getElementById(
+          "message"
+        ).value = "";
+
+
         saveBtn.disabled = true;
-        showSaved({ message: message });
+
+
+        showSaved({
+          message: message
+        });
+
+
         updateViewSavedButton();
 
+
       } catch (localError) {
-        console.error("خطأ في الحفظ المحلي:", localError);
-        status.textContent = "❌ خطأ في حفظ الأثر - تحقق من مساحة التخزين";
-        status.className = "error";
+
+        console.error(
+          "خطأ في الحفظ المحلي:",
+          localError
+        );
+
+        status.textContent =
+          "❌ خطأ في حفظ الأثر";
+
+        status.className =
+          "error";
+
         saveBtn.disabled = false;
+
       }
+
     }
 
-    async function saveTraces(message, retries = 0) {
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 8000);
 
-        const response = await fetch(`${SUPABASE_URL}/rest/v1/traces`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "apikey": SUPABASE_KEY,
-            "Authorization": `Bearer ${SUPABASE_KEY}`,
-            "Prefer": "return=representation"
-          },
-          body: JSON.stringify({
-            message: message,
-            created_at: new Date().toISOString()
-          }),
-          signal: controller.signal
-        });
+    async function saveTraces(
+      message,
+      retries = 0
+    ) {
+
+      try {
+
+        const controller =
+          new AbortController();
+
+
+        const timeoutId =
+          setTimeout(
+            () => controller.abort(),
+            8000
+          );
+
+
+        const response =
+          await fetch(
+            `${SUPABASE_URL}/rest/v1/traces`,
+            {
+              method: "POST",
+
+              headers: {
+                "Content-Type":
+                  "application/json",
+
+                "apikey":
+                  SUPABASE_KEY,
+
+                "Authorization":
+                  `Bearer ${SUPABASE_KEY}`,
+
+                "Prefer":
+                  "return=representation"
+              },
+
+              body: JSON.stringify({
+                message: message,
+                created_at:
+                  new Date().toISOString()
+              }),
+
+              signal:
+                controller.signal
+            }
+          );
+
 
         clearTimeout(timeoutId);
 
+
         if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
+
+          const errorText =
+            await response.text();
+
+          throw new Error(
+            `HTTP ${response.status}: ${errorText}`
+          );
+
         }
 
-        console.log("✓ تم الحفظ في السحابة بنجاح");
+
+        console.log(
+          "✓ تم الحفظ في السحابة بنجاح"
+        );
+
+
         return true;
 
+
       } catch (error) {
-        console.error("خطأ في المحاولة", retries + 1, ":", error);
-        
+
+        console.error(
+          "خطأ في المحاولة",
+          retries + 1,
+          ":",
+          error
+        );
+
+
         if (retries < MAX_RETRIES) {
-          // انتظر ثانية ثم حاول مجدداً
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          return await saveTraces(message, retries + 1);
+
+          await new Promise(
+            resolve =>
+              setTimeout(resolve, 1000)
+          );
+
+          return await saveTraces(
+            message,
+            retries + 1
+          );
+
         }
-        
+
+
         throw error;
+
       }
+
     }
 
-    // دالة بديلة للحفظ (بدون الخطأ في الاسم)
-    async function saveTracks(message) {
-      return await saveTraces(message);
+
+    function saveLocally(
+      message,
+      synced = false
+    ) {
+
+      const traces =
+        JSON.parse(
+          localStorage.getItem(
+            STORAGE_KEY
+          ) || "[]"
+        );
+
+
+      traces.push({
+
+        message: message,
+
+        timestamp:
+          new Date().toISOString(),
+
+        synced: synced,
+
+        id: Date.now()
+
+      });
+
+
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify(traces)
+      );
+
+
+      console.log(
+        "✓ تم الحفظ محليًا بنجاح"
+      );
+
     }
 
-    function saveLocally(message, synced = false) {
-      try {
-        const traces = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
-        traces.push({
-          message: message,
-          timestamp: new Date().toISOString(),
-          synced: synced,
-          id: Date.now()
-        });
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(traces));
-        console.log("✓ تم الحفظ محليًا بنجاح", { synced, count: traces.length });
-      } catch (e) {
-        console.error("خطأ في الحفظ المحلي:", e);
-        throw e;
-      }
-    }
 
     function showSaved(trace) {
+
       if (!trace) return;
 
-      const box = document.getElementById("saved");
-      const message = typeof trace === 'string' ? trace : trace.message;
 
-      box.textContent = "أثرك المحفوظ:\n\n" + message;
-      box.style.display = "block";
+      const box =
+        document.getElementById(
+          "saved"
+        );
+
+
+      const message =
+        typeof trace === "string"
+          ? trace
+          : trace.message;
+
+
+      box.textContent =
+        "أثرك المحفوظ:\n\n" +
+        message;
+
+
+      box.style.display =
+        "block";
+
     }
+
 
     function updateViewSavedButton() {
+
       try {
-        const traces = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
-        const btn = document.getElementById("viewSavedBtn");
-        if (btn && traces.length > 0) {
-          btn.style.display = "inline-block";
-          btn.textContent = `عرض آثارك المحفوظة (${traces.length})`;
+
+        const traces =
+          JSON.parse(
+            localStorage.getItem(
+              STORAGE_KEY
+            ) || "[]"
+          );
+
+
+        const btn =
+          document.getElementById(
+            "viewSavedBtn"
+          );
+
+
+        if (
+          btn &&
+          traces.length > 0
+        ) {
+
+          btn.style.display =
+            "inline-block";
+
+          btn.textContent =
+            `عرض آثارك المحفوظة (${traces.length})`;
+
         }
-      } catch (e) {
-        console.error("خطأ في قراءة الآثار:", e);
+
+      } catch (error) {
+
+        console.error(
+          "خطأ في قراءة الآثار:",
+          error
+        );
+
       }
+
     }
+
 
     function viewAllSaved() {
+
       try {
-        const traces = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+
+        const traces =
+          JSON.parse(
+            localStorage.getItem(
+              STORAGE_KEY
+            ) || "[]"
+          );
+
+
         if (traces.length === 0) {
-          alert("لا توجد آثار محفوظة بعد");
+
+          alert(
+            "لا توجد آثار محفوظة بعد"
+          );
+
           return;
+
         }
 
-        let content = "آثارك المحفوظة:\n\n";
-        traces.forEach((trace, index) => {
-          const date = new Date(trace.timestamp).toLocaleString('ar');
-          const status = trace.synced ? "☁️ (محفوظ في السحابة)" : "💾 (محلي فقط)";
-          content += `${index + 1}. [${date}] ${status}\n${trace.message}\n${'─'.repeat(40)}\n`;
-        });
+
+        let content =
+          "آثارك المحفوظة:\n\n";
+
+
+        traces.forEach(
+          (trace, index) => {
+
+            const date =
+              new Date(
+                trace.timestamp
+              ).toLocaleString("ar");
+
+
+            const syncStatus =
+              trace.synced
+                ? "محفوظ في السحابة"
+                : "محلي فقط";
+
+
+            content +=
+              `${index + 1}. [${date}] ${syncStatus}\n` +
+              `${trace.message}\n` +
+              `${"─".repeat(40)}\n`;
+
+          }
+        );
+
 
         alert(content);
-      } catch (e) {
-        console.error("خطأ:", e);
-        alert("خطأ في عرض الآثار");
+
+
+      } catch (error) {
+
+        console.error(
+          "خطأ:",
+          error
+        );
+
+        alert(
+          "خطأ في عرض الآثار"
+        );
+
       }
+
     }
+
 
     function start() {
-      document.getElementById("form").style.display = "block";
-      document.getElementById("startButton").style.display = "none";
-      document.getElementById("saved").style.display = "none";
-      document.getElementById("status").textContent = "";
-      document.getElementById("message").focus();
+
+      document.getElementById(
+        "form"
+      ).style.display = "block";
+
+
+      document.getElementById(
+        "startButton"
+      ).style.display = "none";
+
+
+      document.getElementById(
+        "saved"
+      ).style.display = "none";
+
+
+      document.getElementById(
+        "status"
+      ).textContent = "";
+
+
+      document.getElementById(
+        "message"
+      ).focus();
+
     }
 
+
     function cancel() {
-      document.getElementById("form").style.display = "none";
-      document.getElementById("startButton").style.display = "inline-block";
-      document.getElementById("status").textContent = "";
+
+      document.getElementById(
+        "form"
+      ).style.display = "none";
+
+
+      document.getElementById(
+        "startButton"
+      ).style.display =
+        "inline-block";
+
+
+      document.getElementById(
+        "status"
+      ).textContent = "";
+
     }
+
   </script>
+
 </body>
 </html>
