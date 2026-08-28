@@ -237,171 +237,6 @@
     }
 
 
-    async function saveToSupabase(message) {
-  try {
-    const response = await fetch(
-      `${SUPABASE_URL}/rest/v1/traces`,
-      {
-        method: "POST",
-
-        headers: {
-          "Content-Type": "application/json",
-          "apikey": SUPABASE_KEY,
-          "Prefer": "return=representation"
-        },
-
-        body: JSON.stringify({
-          message: message
-        })
-      }
-    );
-
-    const result = await response.text();
-
-    console.log("Supabase status:", response.status);
-    console.log("Supabase response:", result);
-
-    if (!response.ok) {
-      document.getElementById("status").textContent =
-        "خطأ Supabase: " +
-        response.status +
-        " — " +
-        result;
-
-      document.getElementById("status").className =
-        "error";
-
-      return false;
-    }
-
-    return true;
-
-  } catch (error) {
-
-    console.error("Connection error:", error);
-
-    document.getElementById("status").textContent =
-      "خطأ اتصال: " + error.message;
-
-    document.getElementById("status").className =
-      "error";
-
-    return false;
-  }
-}
-      const message =
-        document.getElementById("message")
-          .value.trim();
-
-      const status =
-        document.getElementById("status");
-
-      const saveBtn =
-        document.getElementById("saveBtn");
-
-
-      if (!message) {
-
-        status.textContent =
-          "اكتب شيئًا أولًا...";
-
-        status.className = "error";
-
-        return;
-      }
-
-
-      saveBtn.disabled = true;
-
-      status.textContent =
-        "جارٍ حفظ الأثر...";
-
-      status.className = "loading";
-
-
-      let saved = false;
-
-
-      if (navigator.onLine) {
-
-        try {
-
-          saved =
-            await saveTraces(message);
-
-        } catch (error) {
-
-          console.error(
-            "خطأ في الحفظ السحابي:",
-            error
-          );
-
-        }
-
-      }
-
-
-      try {
-
-        saveLocally(message, saved);
-
-
-        if (saved) {
-
-          status.textContent =
-            "✓ تم حفظ الأثر بنجاح!";
-
-          status.className =
-            "success";
-
-        } else {
-
-          status.innerHTML =
-            "⚠️ تم حفظ الأثر محليًا<br>" +
-            "<small>سيتم حفظه في السحابة عند الاتصال</small>";
-
-          status.className =
-            "warning";
-
-        }
-
-
-        document.getElementById(
-          "message"
-        ).value = "";
-
-
-        saveBtn.disabled = true;
-
-
-        showSaved({
-          message: message
-        });
-
-
-        updateViewSavedButton();
-
-
-      } catch (localError) {
-
-        console.error(
-          "خطأ في الحفظ المحلي:",
-          localError
-        );
-
-        status.textContent =
-          "❌ خطأ في حفظ الأثر";
-
-        status.className =
-          "error";
-
-        saveBtn.disabled = false;
-
-      }
-
-    }
-
-
     async function saveTraces(
       message,
       retries = 0
@@ -633,7 +468,7 @@
         if (traces.length === 0) {
 
           alert(
-            "لا توجد أهرامات محفوظة بعد"
+            "لا توجد آثار محفوظة بعد"
           );
 
           return;
@@ -682,6 +517,121 @@
         alert(
           "خطأ في عرض الآثار"
         );
+
+      }
+
+    }
+
+
+    async function saveTrace() {
+
+      const message =
+        document.getElementById("message")
+          .value.trim();
+
+      const status =
+        document.getElementById("status");
+
+      const saveBtn =
+        document.getElementById("saveBtn");
+
+
+      if (!message) {
+
+        status.textContent =
+          "اكتب شيئًا أولًا...";
+
+        status.className = "error";
+
+        return;
+      }
+
+
+      saveBtn.disabled = true;
+
+      status.textContent =
+        "جارٍ حفظ الأثر...";
+
+      status.className = "loading";
+
+
+      let saved = false;
+
+
+      if (navigator.onLine) {
+
+        try {
+
+          saved =
+            await saveTraces(message);
+
+        } catch (error) {
+
+          console.error(
+            "خطأ في الحفظ السحابي:",
+            error
+          );
+
+        }
+
+      }
+
+
+      try {
+
+        saveLocally(message, saved);
+
+
+        if (saved) {
+
+          status.textContent =
+            "✓ تم حفظ الأثر بنجاح!";
+
+          status.className =
+            "success";
+
+        } else {
+
+          status.innerHTML =
+            "⚠️ تم حفظ الأثر محليًا<br>" +
+            "<small>سيتم حفظه في السحابة عند الاتصال</small>";
+
+          status.className =
+            "warning";
+
+        }
+
+
+        document.getElementById(
+          "message"
+        ).value = "";
+
+
+        saveBtn.disabled = true;
+
+
+        showSaved({
+          message: message
+        });
+
+
+        updateViewSavedButton();
+
+
+      } catch (localError) {
+
+        console.error(
+          "خطأ في الحفظ المحلي:",
+          localError
+        );
+
+        status.textContent =
+          "❌ خطأ في حفظ الأثر";
+
+        status.className =
+          "error";
+
+        saveBtn.disabled = false;
 
       }
 
