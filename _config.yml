@@ -1,0 +1,8 @@
+# GitHub Pages Configuration
+# This file enables GitHub Pages deployment
+
+site_name: الأثر
+theme:
+  name: null
+
+# Static site - no build required
