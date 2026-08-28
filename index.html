@@ -2,7 +2,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>الأثر</title>  <style>
+  <title>الأثر</title>
+  <style>
     * {
       box-sizing: border-box;
     }
@@ -76,6 +77,13 @@
       cursor: not-allowed;
     }
 
+    .secondary-btn {
+      background: #2a2a3a;
+      color: #ddd;
+      font-size: 14px;
+      padding: 12px 20px;
+    }
+
     #form {
       display: none;
     }
@@ -105,46 +113,66 @@
       font-size: 14px;
     }
 
+    .warning {
+      color: #ffbb77;
+      margin-top: 15px;
+      font-size: 14px;
+    }
+
     .loading {
       color: #aaa;
       margin-top: 15px;
       font-size: 14px;
     }
-  </style></head><body>  <div class="container"><h1>الأثر</h1>
 
-<p>
-  بعض الأشياء لا ينبغي أن تصل الآن.
-  <br>
-  اترك شيئًا للمستقبل.
-</p>
+    .offline-notice {
+      background: #2a2a2a;
+      padding: 10px;
+      border-radius: 8px;
+      margin-top: 10px;
+      font-size: 13px;
+      color: #888;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>الأثر</h1>
 
-<button id="startButton" onclick="start()">
-  اترك أثرًا
-</button>
+    <p>
+      بعض الأشياء لا ينبغي أن تصل الآن.
+      <br>
+      اترك شيئًا للمستقبل.
+    </p>
 
-<div id="form">
+    <button id="startButton" onclick="start()">
+      اترك أثرًا
+    </button>
 
-  <textarea id="message" placeholder="اكتب أثرك هنا..."></textarea>
+    <div id="form">
+      <textarea id="message" placeholder="اكتب أثرك هنا..."></textarea>
 
-  <br>
+      <br>
 
-  <button id="saveBtn" onclick="saveTrace()" disabled>
-    حفظ الأثر
-  </button>
+      <button id="saveBtn" onclick="saveTrace()" disabled>
+        حفظ الأثر
+      </button>
 
-  <button onclick="cancel()">
-    إلغاء
-  </button>
+      <button onclick="cancel()">
+        إلغاء
+      </button>
 
-  <div id="status"></div>
+      <div id="status"></div>
 
-</div>
+    </div>
 
-<div id="saved"></div>
+    <div id="saved"></div>
+  </div>
 
-  </div>  <script>
+  <script>
     const SUPABASE_URL = "https://wkhpgcwevnkmrtnytmbk.supabase.co";
     const SUPABASE_KEY = "sb_publishable_lr9IOVlibgbCWNqL3eknLQ_Oe0FIwvR";
+    const STORAGE_KEY = "traces_backup";
 
     // تفعيل زر الحفظ عند كتابة النص
     document.addEventListener('DOMContentLoaded', function() {
@@ -157,7 +185,17 @@
           }
         });
       }
+
+      // التحقق من حالة الاتصال
+      checkConnectionStatus();
+      window.addEventListener('online', checkConnectionStatus);
+      window.addEventListener('offline', checkConnectionStatus);
     });
+
+    function checkConnectionStatus() {
+      const isOnline = navigator.onLine;
+      console.log("حالة الاتصال:", isOnline ? "متصل" : "غير متصل");
+    }
 
     async function saveTrace() {
       const message = document.getElementById("message").value.trim();
@@ -175,11 +213,9 @@
       status.className = "loading";
 
       try {
-        console.log("إرسال الطلب إلى:", SUPABASE_URL + "/rest/v1/traces");
-
-        const response = await fetch(
-          SUPABASE_URL + "/rest/v1/traces",
-          {
+        // محاولة الحفظ في Supabase
+        const response = await Promise.race([
+          fetch(SUPABASE_URL + "/rest/v1/traces", {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -188,27 +224,35 @@
               "Prefer": "return=representation"
             },
             body: JSON.stringify({
-              message: message
+              message: message,
+              created_at: new Date().toISOString()
             })
-          }
-        );
-
-        console.log("حالة الاستجابة:", response.status);
-
-        const responseText = await response.text();
-        console.log("نص الاستجابة:", responseText);
+          }),
+          // مهلة زمنية 8 ثوان
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error("timeout")), 8000)
+          )
+        ]);
 
         if (!response.ok) {
-          throw new Error(`خطأ ${response.status}: ${responseText}`);
+          throw new Error(`HTTP ${response.status}`);
         }
 
+        const responseText = await response.text();
         let data;
-        try {
-          data = JSON.parse(responseText);
-        } catch (e) {
-          console.error("خطأ في تحليل JSON:", e);
-          throw new Error("استجابة غير صحيحة من الخادم");
+
+        if (responseText) {
+          try {
+            data = JSON.parse(responseText);
+          } catch (e) {
+            data = { message: message };
+          }
+        } else {
+          data = { message: message };
         }
+
+        // حفظ محلي كنسخة احتياطية
+        saveLocally(message);
 
         status.textContent = "✓ تم حفظ الأثر بنجاح!";
         status.className = "success";
@@ -219,25 +263,58 @@
         showSaved(data[0] || data);
 
       } catch (error) {
-        console.error("خطأ كامل:", error);
+        console.error("خطأ:", error);
 
-        let errorMessage = "حدث خطأ أثناء حفظ الأثر";
-        
-        if (error.message.includes("Failed to fetch")) {
-          errorMessage = "❌ مشكلة في الاتصال - تحقق من CORS";
-        } else if (error.message.includes("401")) {
-          errorMessage = "❌ مفتاح API غير صحيح";
-        } else if (error.message.includes("403")) {
-          errorMessage = "❌ ليس لديك صلاحية للكتابة";
-        } else if (error.message.includes("404")) {
-          errorMessage = "❌ جدول 'traces' غير موجود";
-        } else {
-          errorMessage = "❌ " + error.message;
+        // محاولة الحفظ المحلي كبديل
+        try {
+          saveLocally(message);
+          
+          status.innerHTML = "⚠️ تم حفظ الأثر محليًا<br><small>سيتم مزامجته عند الاتصال</small>";
+          status.className = "warning";
+
+          document.getElementById("message").value = "";
+          saveBtn.disabled = true;
+
+          showSaved({ message: message });
+        } catch (localError) {
+          let errorMessage = "حدث خطأ أثناء حفظ الأثر";
+
+          if (error.message === "timeout") {
+            errorMessage = "❌ انتهت مهلة الاتصال - حاول مرة أخرى";
+          } else if (!navigator.onLine) {
+            errorMessage = "❌ لا توجد اتصال إنترنت";
+          } else if (error.message.includes("Failed to fetch") || error.message.includes("CORS")) {
+            errorMessage = "❌ مشكلة في الاتصال - تحقق من الإعدادات";
+          } else if (error.message.includes("401")) {
+            errorMessage = "❌ مشكلة في المصادقة";
+          } else if (error.message.includes("403")) {
+            errorMessage = "❌ ليس لديك صلاحية للكتابة";
+          } else if (error.message.includes("404")) {
+            errorMessage = "❌ الخادم غير متاح";
+          } else {
+            errorMessage = "❌ " + error.message;
+          }
+
+          status.textContent = errorMessage;
+          status.className = "error";
+          saveBtn.disabled = false;
         }
+      }
+    }
 
-        status.textContent = errorMessage;
-        status.className = "error";
-        saveBtn.disabled = false;
+    function saveLocally(message) {
+      try {
+        const traces = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+        traces.push({
+          message: message,
+          timestamp: new Date().toISOString(),
+          synced: false
+        });
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(traces));
+        console.log("تم الحفظ محليًا بنجاح");
+      } catch (e) {
+        console.error("خطأ في الحفظ المحلي:", e);
+        throw e;
       }
     }
 
@@ -255,6 +332,7 @@
       document.getElementById("form").style.display = "block";
       document.getElementById("startButton").style.display = "none";
       document.getElementById("saved").style.display = "none";
+      document.getElementById("status").textContent = "";
       document.getElementById("message").focus();
     }
 
@@ -263,5 +341,6 @@
       document.getElementById("startButton").style.display = "inline-block";
       document.getElementById("status").textContent = "";
     }
-  </script></body>
+  </script>
+</body>
 </html>
