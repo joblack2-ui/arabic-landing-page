@@ -237,8 +237,58 @@
     }
 
 
-    async function saveTrace() {
+    async function saveToSupabase(message) {
+  try {
+    const response = await fetch(
+      `${SUPABASE_URL}/rest/v1/traces`,
+      {
+        method: "POST",
 
+        headers: {
+          "Content-Type": "application/json",
+          "apikey": SUPABASE_KEY,
+          "Prefer": "return=representation"
+        },
+
+        body: JSON.stringify({
+          message: message
+        })
+      }
+    );
+
+    const result = await response.text();
+
+    console.log("Supabase status:", response.status);
+    console.log("Supabase response:", result);
+
+    if (!response.ok) {
+      document.getElementById("status").textContent =
+        "خطأ Supabase: " +
+        response.status +
+        " — " +
+        result;
+
+      document.getElementById("status").className =
+        "error";
+
+      return false;
+    }
+
+    return true;
+
+  } catch (error) {
+
+    console.error("Connection error:", error);
+
+    document.getElementById("status").textContent =
+      "خطأ اتصال: " + error.message;
+
+    document.getElementById("status").className =
+      "error";
+
+    return false;
+  }
+}
       const message =
         document.getElementById("message")
           .value.trim();
@@ -583,7 +633,7 @@
         if (traces.length === 0) {
 
           alert(
-            "لا توجد آثار محفوظة بعد"
+            "لا توجد أهرامات محفوظة بعد"
           );
 
           return;
