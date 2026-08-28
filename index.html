@@ -60,10 +60,20 @@
       background: white;
       color: #111;
       margin: 5px;
+      transition: all 0.2s;
+    }
+
+    button:hover {
+      opacity: 0.9;
     }
 
     button:active {
       transform: scale(0.97);
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
     }
 
     #form {
@@ -80,16 +90,25 @@
       line-height: 1.8;
       white-space: pre-wrap;
       text-align: right;
+      border: 1px solid #2a2a3a;
     }
 
     .success {
-      color: #aaa;
+      color: #77ff77;
       margin-top: 15px;
+      font-size: 14px;
     }
 
     .error {
       color: #ff7777;
       margin-top: 15px;
+      font-size: 14px;
+    }
+
+    .loading {
+      color: #aaa;
+      margin-top: 15px;
+      font-size: 14px;
     }
   </style></head><body>  <div class="container"><h1>الأثر</h1>
 
@@ -109,7 +128,7 @@
 
   <br>
 
-  <button onclick="saveTrace()">
+  <button id="saveBtn" onclick="saveTrace()" disabled>
     حفظ الأثر
   </button>
 
@@ -124,19 +143,26 @@
 <div id="saved"></div>
 
   </div>  <script>
-    const SUPABASE_URL =
-      "https://wkhpgcwevnkmrtnytmbk.supabase.co";
+    const SUPABASE_URL = "https://wkhpgcwevnkmrtnytmbk.supabase.co";
+    const SUPABASE_KEY = "sb_publishable_lr9IOVlibgbCWNqL3eknLQ_Oe0FIwvR";
 
-    const SUPABASE_KEY =
-      "sb_publishable_lr9IOVlibgbCWNqL3eknLQ_Oe0FIwvR";
+    // تفعيل زر الحفظ عند كتابة النص
+    document.addEventListener('DOMContentLoaded', function() {
+      const textarea = document.getElementById("message");
+      if (textarea) {
+        textarea.addEventListener('input', function() {
+          const saveBtn = document.getElementById("saveBtn");
+          if (saveBtn) {
+            saveBtn.disabled = this.value.trim().length === 0;
+          }
+        });
+      }
+    });
 
     async function saveTrace() {
-
-      const message =
-        document.getElementById("message").value.trim();
-
-      const status =
-        document.getElementById("status");
+      const message = document.getElementById("message").value.trim();
+      const status = document.getElementById("status");
+      const saveBtn = document.getElementById("saveBtn");
 
       if (!message) {
         status.textContent = "اكتب شيئًا أولًا...";
@@ -144,86 +170,98 @@
         return;
       }
 
+      saveBtn.disabled = true;
       status.textContent = "جارٍ حفظ الأثر...";
-      status.className = "success";
+      status.className = "loading";
 
       try {
+        console.log("إرسال الطلب إلى:", SUPABASE_URL + "/rest/v1/traces");
 
         const response = await fetch(
           SUPABASE_URL + "/rest/v1/traces",
           {
             method: "POST",
-
             headers: {
               "Content-Type": "application/json",
               "apikey": SUPABASE_KEY,
               "Authorization": "Bearer " + SUPABASE_KEY,
               "Prefer": "return=representation"
             },
-
             body: JSON.stringify({
               message: message
             })
           }
         );
 
+        console.log("حالة الاستجابة:", response.status);
+
+        const responseText = await response.text();
+        console.log("نص الاستجابة:", responseText);
+
         if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(errorText);
+          throw new Error(`خطأ ${response.status}: ${responseText}`);
         }
 
-        const data = await response.json();
+        let data;
+        try {
+          data = JSON.parse(responseText);
+        } catch (e) {
+          console.error("خطأ في تحليل JSON:", e);
+          throw new Error("استجابة غير صحيحة من الخادم");
+        }
 
-        status.textContent = "تم حفظ الأثر بنجاح.";
+        status.textContent = "✓ تم حفظ الأثر بنجاح!";
         status.className = "success";
 
         document.getElementById("message").value = "";
+        saveBtn.disabled = true;
 
-        showSaved(data[0]);
+        showSaved(data[0] || data);
 
       } catch (error) {
+        console.error("خطأ كامل:", error);
 
-        console.error(error);
+        let errorMessage = "حدث خطأ أثناء حفظ الأثر";
+        
+        if (error.message.includes("Failed to fetch")) {
+          errorMessage = "❌ مشكلة في الاتصال - تحقق من CORS";
+        } else if (error.message.includes("401")) {
+          errorMessage = "❌ مفتاح API غير صحيح";
+        } else if (error.message.includes("403")) {
+          errorMessage = "❌ ليس لديك صلاحية للكتابة";
+        } else if (error.message.includes("404")) {
+          errorMessage = "❌ جدول 'traces' غير موجود";
+        } else {
+          errorMessage = "❌ " + error.message;
+        }
 
-        status.textContent =
-          "حدث خطأ أثناء حفظ الأثر.";
-
+        status.textContent = errorMessage;
         status.className = "error";
+        saveBtn.disabled = false;
       }
     }
 
     function showSaved(trace) {
-
       if (!trace) return;
 
-      const box =
-        document.getElementById("saved");
+      const box = document.getElementById("saved");
+      const message = typeof trace === 'string' ? trace : trace.message;
 
-      box.textContent =
-        "أثرك المحفوظ:\n\n" +
-        trace.message;
-
+      box.textContent = "أثرك المحفوظ:\n\n" + message;
       box.style.display = "block";
     }
 
     function start() {
-
-      document.getElementById("form").style.display =
-        "block";
-
-      document.getElementById("startButton").style.display =
-        "none";
-
+      document.getElementById("form").style.display = "block";
+      document.getElementById("startButton").style.display = "none";
+      document.getElementById("saved").style.display = "none";
       document.getElementById("message").focus();
     }
 
     function cancel() {
-
-      document.getElementById("form").style.display =
-        "none";
-
-      document.getElementById("startButton").style.display =
-        "inline-block";
+      document.getElementById("form").style.display = "none";
+      document.getElementById("startButton").style.display = "inline-block";
+      document.getElementById("status").textContent = "";
     }
   </script></body>
 </html>
